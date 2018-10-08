@@ -1,11 +1,11 @@
+#include "param.h"
 
-// the number of queues in the MLFQ
-#define NQUEUE = 6;
+// #define NQUEUE = 6
 
 // the constant time quantum increase for each queue
 // since timer intterupt happens every 10ms, divide
 // this value by 10.
-#define TQ = 1;
+// #define TQ = 1;
 
 
 struct MLFQ {

@@ -14,6 +14,9 @@ struct {
 
 static struct proc *initproc;
 
+// MLFQ struct
+struct mlfq *queues;
+
 int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
@@ -471,5 +474,17 @@ procdump(void)
         cprintf(" %p", pc[i]);
     }
     cprintf("\n");
+  }
+}
+
+// initialize the queues, 1 through 6
+void
+initmlfq(void)
+{
+
+// loop thru queues and set the quantum time
+// code doesn't work, idk whats wrong
+  for (int i=0; i<NQUEUE; i++) {
+    queues[i]->quantum = i+1 * 10;
   }
 }
