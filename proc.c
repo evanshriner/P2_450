@@ -502,6 +502,8 @@ mlfqinit(void)
   for (int i=0; i < NQUEUE; i++) {
     mlfq.queues[i].quantum = i+1 * 10;
     mlfq.queues[i].size = 0;
+    mlfq.queues[i].front = 0;
+    mlfq.queues[i].back = 0;
   }
 }
 
