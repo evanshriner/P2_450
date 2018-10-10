@@ -16,6 +16,12 @@ struct queue {
     // amount of processes
     int size;
 
+
+    // since this is a circular queue, you are just going to mimic
+    // moving the processes to the front -- really you are just going
+    // to increment the front position and maintain the back position
+    // until it is larger than the queue size (NPROC), then just
+    // set the back to the inital position
     int front; // front of queue
 
     int back; // back of queue

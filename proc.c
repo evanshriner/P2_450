@@ -20,8 +20,8 @@ static struct proc *initproc;
 // SepAratIon Of ConCErnS BOIIIIIIII
 struct {
   int runpos; // queue position of running process
-  int qpos; // current queue
   int timeup; // remaining time slice
+  int boost; // TODO: implement boost functionality
 } running = {0};
 
 struct MLFQ mlfq;
@@ -286,39 +286,66 @@ void
 scheduler(void)
 {
   struct proc *p;
+  struct queue *cqueue;
+  int i;
 
   for(;;){
+    i = -1;
+    running.runpos = -1;
     // Enable interrupts on this processor.
     sti();
 
-    // Loop over process table looking for process to run.
-
-   // if(running.timeup) { // true
-//
-  //  } else {
-   //   --running.timeup;
-  //  }
-
+    // Loop over queues looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
+    for (cqueue = mlfq.queues; cqueue < &mlfq.queues[NQUEUE]; cqueue++) {
+      ++i;
+      if (!cqueue->size) {// if queue does not have processes in it
         continue;
+      }
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&cpu->scheduler, proc->context);
-      switchkvm();
+      for (p = cqueue->q; p < &cqueue->q[NPROC]; p++) {
+        ++running.runpos; // increment queue position of possible running process
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      proc = 0;
+        if (p->state != RUNNABLE)
+          continue;
+
+        // TODO: set time slice values, set running struct
+        running.timeup = i + 1;
+        while (running.timeup) { // if time remaining is not equal to 0
+          proc = p;
+          switchuvm(p);
+          p->state = RUNNING;
+          // run process until interrupt or complete
+          swtch(&cpu->scheduler, proc->context);
+          switchkvm();
+
+          if (p->state != RUNNABLE){
+
+            // check if process is done running/complete (ZOMBIE)
+            if (p->state == ZOMBIE) {
+              dequeue(cqueue, running.runpos);
+            }
+            // what if process is on i/o thread and not able to make use of cpu even though it is scheduled?
+            // should we just continue to run it anyway? this takes it out and puts it
+            // in next queue
+
+            // if zombie or on i/o
+            break;
+          }
+          --running.timeup;
+        }
+        // time is up, swap if still not zombie
+        if (p->state != ZOMBIE) {
+          swap(&mlfq.queues[i], &mlfq.queues[i + 1], running.runpos)
+        }
+        break; // if this wasnt there, would continue to loop through this array
+      }
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        proc = 0;
+        break; // if this wasnt here, would continue to search through next queue in MLFQ for next runnable process.
     }
     release(&ptable.lock);
-
   }
 }
 
@@ -333,14 +360,15 @@ sched(void)
     panic("sched ptable.lock");
   if(cpu->ncli != 1)
     panic("sched locks");
+  // this shows that the running processe's will always be a different process than running when it goes into the queue.
   if(proc->state == RUNNING)
     panic("sched running");
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = cpu->intena;
-  // HOLY SHIT!! so this is where it switches to what is pointing at the scheduler, then the scheduler
-  // sets up the next process. this is why sched is called in:
-  //
+  // HOLY SHIT!! so this is where it switches to what is pointing at the scheduler (the line of code where you left off), then the scheduler
+  // sets up the next process.
+  // sched is called from every process API that haults the process (wait, yield,) and timer interrupt
   swtch(&proc->context, cpu->scheduler);
   cpu->intena = intena;
 }
@@ -509,6 +537,7 @@ mlfqinit(void)
 
 // adds the proc pointer to back of the circular queue
 // updates front and back queue pointers
+// updates queue size
 void
 enqueue(struct queue *q, struct proc *proc)
 {
@@ -523,5 +552,24 @@ enqueue(struct queue *q, struct proc *proc)
 void
 dequeue(struct queue *q, int pos)
 {
+
+}
+
+// dequeues process at position
+// enqueues process in back of next queue
+void
+swap(struct queue *preq, struct queue *postq, int pos)
+{
+  enqueue(postq, preq->q[pos]);
+  dequeue(preq, pos);
+}
+
+// takes mlfq
+// loops through all queues and moves them up to front
+// as it finds them
+// note: you will not need to check if they can all fit in the
+// first queue because there is a max of 64 processes in the entire
+void
+boost(){
 
 }

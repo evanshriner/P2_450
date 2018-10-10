@@ -108,8 +108,6 @@ int             pipewrite(struct pipe*, char*, int);
 struct proc*    copyproc(struct proc*);
 void            exit(void);
 int             fork(void);
-void            enqueue(struct queue*, struct proc*);
-void            dequeue(struct queue*, int);
 int             growproc(int);
 int             kill(int);
 void            pinit(void);
@@ -122,6 +120,10 @@ int             wait(void);
 void            wakeup(void*);
 void            yield(void);
 void            mlfqinit(void);
+void            enqueue(struct queue*, struct proc*);
+void            dequeue(struct queue*, int);
+void            swap(struct queue*, struct queue*, int);
+void            boost(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
