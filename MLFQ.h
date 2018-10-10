@@ -8,13 +8,6 @@
 // #define TQ = 1;
 
 
-struct MLFQ {
-
-    // pointer to queue array
-    struct queue *queues[NQUEUE];
-
-};
-
 struct queue {
 
     // array of processes
@@ -23,8 +16,20 @@ struct queue {
     // amount of processes
     int size;
 
+    int front; // front of queue
+
+    int back; // back of queue
+
     // time quantum of selected queue
     int quantum; // this is assigned during initalization of proc.c / scheduler
 
 
 };
+
+struct MLFQ {
+
+    // static queue structure
+    struct queue queues[NQUEUE];
+
+};
+

@@ -6,6 +6,7 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "MLFQ.h"
 
 struct {
   struct spinlock lock;
@@ -14,8 +15,16 @@ struct {
 
 static struct proc *initproc;
 
-// MLFQ struct
-struct mlfq *queues;
+// information about the current running process for scheduler
+// would be messy if we put it directly in proc struct because
+// SepAratIon Of ConCErnS BOIIIIIIII
+struct {
+  int runpos; // queue position of running process
+  int qpos; // current queue
+  int timeup; // remaining time slice
+} running = {0};
+
+struct MLFQ mlfq;
 
 int nextpid = 1;
 extern void forkret(void);
@@ -51,7 +60,9 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  enqueue(&mlfq.queues[0], p);
   release(&ptable.lock);
+
 
   // Allocate kernel stack.
   if((p->kstack = kalloc()) == 0){
@@ -281,6 +292,13 @@ scheduler(void)
     sti();
 
     // Loop over process table looking for process to run.
+
+   // if(running.timeup) { // true
+//
+  //  } else {
+   //   --running.timeup;
+  //  }
+
     acquire(&ptable.lock);
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
@@ -477,14 +495,31 @@ procdump(void)
   }
 }
 
-// initialize the queues, 1 through 6
 void
-initmlfq(void)
+mlfqinit(void)
+{
+// loop thru queues and set the quantum time
+  for (int i=0; i < NQUEUE; i++) {
+    mlfq.queues[i].quantum = i+1 * 10;
+    mlfq.queues[i].size = 0;
+  }
+}
+
+// adds the proc pointer to back of the circular queue
+// updates front and back queue pointers
+void
+enqueue(struct queue *q, struct proc *proc)
 {
 
-// loop thru queues and set the quantum time
-// code doesn't work, idk whats wrong
-  for (int i=0; i<NQUEUE; i++) {
-    queues[i]->quantum = i+1 * 10;
-  }
+
+}
+
+
+// sets the process back to init (UNUSED, etc)
+// sets the queue slot designated by pos to null
+// updates front and back queue pointers (queue->front, queue->back)
+void
+dequeue(struct queue *q, int pos)
+{
+
 }
