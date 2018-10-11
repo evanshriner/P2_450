@@ -15,15 +15,6 @@ struct {
 
 static struct proc *initproc;
 
-// information about the current running process for scheduler
-// would be messy if we put it directly in proc struct because
-// SepAratIon Of ConCErnS BOIIIIIIII
-struct {
-  int runpos; // queue position of running process
-  int timeup; // remaining time slice
-  int boost; // TODO: implement boost functionality
-} running = {0};
-
 struct MLFQ mlfq;
 
 int nextpid = 1;
@@ -60,6 +51,8 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+
+  // puts a newly created process at back of first queue
   enqueue(&mlfq.queues[0], p);
   release(&ptable.lock);
 
@@ -291,7 +284,7 @@ scheduler(void)
 
   for(;;){
     i = -1;
-    running.runpos = -1;
+    mlfq.runpos = -1;
     // Enable interrupts on this processor.
     sti();
 
@@ -303,15 +296,19 @@ scheduler(void)
         continue;
       }
 
-      for (p = cqueue->q; p < &cqueue->q[NPROC]; p++) {
-        ++running.runpos; // increment queue position of possible running process
+      // TODO: getproc(cqueue)
 
+      for (p = cqueue->q; p < &cqueue->q[NPROC]; p++) {
+        ++mlfq.runpos; // increment queue position of possible running process
+
+        // check next process in queue if this aint runnable
         if (p->state != RUNNABLE)
           continue;
 
-        // TODO: set time slice values, set running struct
-        running.timeup = i + 1;
-        while (running.timeup) { // if time remaining is not equal to 0
+        // set time slice values, set running struct
+        mlfq.timeup = cqueue->quantum;
+
+        while (mlfq.timeup) { // if time remaining is not equal to 0
           proc = p;
           switchuvm(p);
           p->state = RUNNING;
@@ -323,7 +320,7 @@ scheduler(void)
 
             // check if process is done running/complete (ZOMBIE)
             if (p->state == ZOMBIE) {
-              dequeue(cqueue, running.runpos);
+              dequeue(cqueue, mlfq.runpos);
             }
             // what if process is on i/o thread and not able to make use of cpu even though it is scheduled?
             // should we just continue to run it anyway? this takes it out and puts it
@@ -332,11 +329,11 @@ scheduler(void)
             // if zombie or on i/o
             break;
           }
-          --running.timeup;
+          --mlfq.timeup;
         }
-        // time is up, swap if still not zombie
-        if (p->state != ZOMBIE) {
-          swap(&mlfq.queues[i], &mlfq.queues[i + 1], running.runpos)
+        // time is up, swap if still not zombie and not in q6
+        if (p->state != ZOMBIE && i != NQUEUE - 1) {
+          swapqueue(&mlfq.queues[i], &mlfq.queues[i + 1])
         }
         break; // if this wasnt there, would continue to loop through this array
       }
@@ -530,8 +527,8 @@ mlfqinit(void)
   for (int i=0; i < NQUEUE; i++) {
     mlfq.queues[i].quantum = i+1 * 10;
     mlfq.queues[i].size = 0;
-    mlfq.queues[i].front = 0;
-    mlfq.queues[i].back = 0;
+    mlfq.queues[i].front = -1;
+    mlfq.queues[i].back = -1;
   }
 }
 
@@ -541,8 +538,20 @@ mlfqinit(void)
 void
 enqueue(struct queue *q, struct proc *proc)
 {
+  // add process to the back of the queue
+  // if the back is 63, move back to 0
 
+  // nothing in the queue, set both to 0 initially
+  if (q->front == -1 && q->back == -1) {
+    q->front = 0;
+    q->back = 0;
+  } else {
+    q->back++;
+  }
 
+  if (q->back >= 64)
+    q->back = 0;
+  q->q[q->back] = proc;
 }
 
 
@@ -550,18 +559,30 @@ enqueue(struct queue *q, struct proc *proc)
 // sets the queue slot designated by pos to null
 // updates front and back queue pointers (queue->front, queue->back)
 void
-dequeue(struct queue *q, int pos)
+dequeue(struct queue *q)
 {
+  // increment front
+  q->front++;
+  // if front is greater than back, queue is empty
+  if (q->front > q->back) {
+    q->back = -1;
+    q->front = -1;
+  }
 
+  // check for out of bounds
+  if(q->front >= 64)
+    q->front = 0;
+  if (q->back >= 64) {
+    q->back = 0;
 }
 
 // dequeues process at position
 // enqueues process in back of next queue
 void
-swap(struct queue *preq, struct queue *postq, int pos)
+swapqueue(struct queue *preq, struct queue *postq, struct proc *proc)
 {
-  enqueue(postq, preq->q[pos]);
-  dequeue(preq, pos);
+  enqueue(postq, &proc);
+  dequeue(preq);
 }
 
 // takes mlfq
@@ -572,4 +593,18 @@ swap(struct queue *preq, struct queue *postq, int pos)
 void
 boost(){
 
+}
+
+// returns the next process in the queue
+struct proc *p getproc(struct queue *q) {
+  return &q->q[q->front];
+}
+
+// return amount of processess in the queue
+int getsize(struct queue q) {
+  if (q->front == -1 && q->back == -1) {
+    return 0;
+  } else {
+    return q->back - q->front + 1;
+  }
 }

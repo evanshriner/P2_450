@@ -121,8 +121,8 @@ void            wakeup(void*);
 void            yield(void);
 void            mlfqinit(void);
 void            enqueue(struct queue*, struct proc*);
-void            dequeue(struct queue*, int);
-void            swap(struct queue*, struct queue*, int);
+void            dequeue(struct queue*);
+void            swapqueue(struct queue*, struct queue*);
 void            boost(void);
 
 // swtch.S
