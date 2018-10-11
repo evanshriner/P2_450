@@ -16,6 +16,7 @@ struct {
 static struct proc *initproc;
 
 struct MLFQ mlfq;
+int queuepointers[NQUEUE];
 
 int nextpid = 1;
 extern void forkret(void);
@@ -53,7 +54,8 @@ found:
   p->pid = nextpid++;
 
   // puts a newly created process at back of first queue
-  enqueue(&mlfq.queues[0], p);
+  // enqueue(&mlfq.queues[0], p);
+  p->queue = 1;
   release(&ptable.lock);
 
 
@@ -66,7 +68,6 @@ found:
   sp = p->kstack + KSTACKSIZE;
 
   // put the process pointer at the end of queue 1
-
 
   // Leave room for trap frame.
   sp -= sizeof *p->tf;
@@ -251,6 +252,7 @@ wait(void)
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
+        p->queue = 0;
         release(&ptable.lock);
         return pid;
       }
@@ -279,27 +281,93 @@ void
 scheduler(void)
 {
   struct proc *p;
-  struct queue *cqueue;
-  int i;
+  //struct queue *cqueue;
+  //int i;
 
   for(;;){
-    i = -1;
+    //i = -1;
     // Enable interrupts on this processor.
     sti();
-    cprintf("got to beginning of scheduler\n");
+    //cprintf("got to beginning of scheduler\n");
     // Loop over queues looking for process to run.
     acquire(&ptable.lock);
-    for (cqueue = mlfq.queues; cqueue < &mlfq.queues[NQUEUE]; cqueue++) {
+
+
+    // MLFQ check each queue for processes
+    for (int j = 1; j <= NQUEUE; j++) {
+
+      mlfq.timeup = j * 10;
+      int didRun = 0;
+
+      // look for the next process that is in this queue, in the ptable
+      for (int k = 0; k < NPROC; k++) {
+
+        // start from the queue pointer
+        p = &ptable.proc[(k + queuepointers[j]) % NPROC];
+
+        // is this process in Qj?
+        if(p->queue == j && p->state == RUNNABLE) {
+          
+          // set the queuepointer for Qj to k
+          queuepointers[j] = k+1;
+
+          didRun = 1;
+
+          // if time remaining is not equal to 0
+          while (mlfq.timeup) {
+          
+            proc = p;
+            switchuvm(p);
+            p->state = RUNNING;
+            //cprintf("about to switch\n");
+
+            // run process until interrupt or complete
+            swtch(&cpu->scheduler, proc->context);
+            switchkvm();
+
+            //cprintf("process %s interrupted by timer interrupt \n", p->name, p->pid, i + 1);
+
+            // if process comes back as not runnable
+            // cprintf("processes current state: %d \n", p->state);
+
+            if (p->state != RUNNABLE){
+                // if zombie or on i/o
+                break;
+            }
+            --mlfq.timeup;
+          }
+
+          // process has used its time slice,
+          cprintf("process %s %d has consumed %d ms in Q%d \n", p->name, p->pid, j * 10, j);
+
+          // time is up, set to next q if still not zombie and not in q6
+          if (p->state != ZOMBIE) {
+            if (j != NQUEUE) {
+                p->queue++;
+            }
+          }
+
+          // Process is done running for now.
+          // It should have changed its p->state before coming back.
+          proc = 0;
+          break; // we ran a process, start the whole scheduler from the top
+
+        }
+      }
+      if (didRun == 1) break; // if this wasnt here, would continue to search through next queue in MLFQ for next runnable process.
+    }
+
+    /*for (cqueue = mlfq.queues; cqueue < &mlfq.queues[NQUEUE]; cqueue++) {
       ++i;
-      cprintf("queue size: %d\n", cqueue->size);
+      // cprintf("queue size: %d\n", cqueue->size);
       if (!cqueue->size) {// if queue does not have processes in it
-          cprintf("continuing past queue%d", i + 1);
+          // cprintf("continuing past queue%d", i + 1);
           continue;
       }
 
       // has found a queue with processes with it. get process
       p = peek(cqueue);
-      cprintf("process at front: %s\n", p->name);
+      //cprintf("process at front: %s\n", p->name);
       // set time slice value
       mlfq.timeup = cqueue->quantum;
 
@@ -308,7 +376,7 @@ scheduler(void)
           proc = p;
           switchuvm(p);
           p->state = RUNNING;
-          cprintf("about to switch\n");
+          //cprintf("about to switch\n");
           // run process until interrupt or complete
           swtch(&cpu->scheduler, proc->context);
           switchkvm();
@@ -348,7 +416,7 @@ scheduler(void)
         // It should have changed its p->state before coming back.
         proc = 0;
         break; // if this wasnt here, would continue to search through next queue in MLFQ for next runnable process.
-    }
+    }*/
     release(&ptable.lock);
   }
 }
@@ -561,7 +629,7 @@ enqueue(struct queue *q, struct proc *p)
 
   q->q[q->back] = p;
   q->size++;
-  cprintf("%s has been added to the queue\n", p->name);
+  cprintf("%s has been added to back of Q%d\n", p->name, q->quantum / 10);
 }
 
 
@@ -623,7 +691,10 @@ getsize(struct queue *q) {
   if (q->front == -1 && q->back == -1)
     return 0;
 
-  return q->back - q->front + 1;
-  // TODO: fix -- what if back is 7 and front is 61, for instance?
+  if (q->front < q->back) {
+    return q->back - q->front + 1;
+  } else {
+    return 65 - q->front + q->back;
+  }
 }
 
