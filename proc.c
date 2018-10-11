@@ -284,59 +284,66 @@ scheduler(void)
 
   for(;;){
     i = -1;
-    mlfq.runpos = -1;
     // Enable interrupts on this processor.
     sti();
-
+    cprintf("got to beginning of scheduler\n");
     // Loop over queues looking for process to run.
     acquire(&ptable.lock);
     for (cqueue = mlfq.queues; cqueue < &mlfq.queues[NQUEUE]; cqueue++) {
       ++i;
+      cprintf("queue size: %d\n", cqueue->size);
       if (!cqueue->size) {// if queue does not have processes in it
-        continue;
+          cprintf("continuing past queue%d", i + 1);
+          continue;
       }
 
-      // TODO: getproc(cqueue)
+      // has found a queue with processes with it. get process
+      p = peek(cqueue);
+      cprintf("process at front: %s\n", p->name);
+      // set time slice value
+      mlfq.timeup = cqueue->quantum;
 
-      for (p = cqueue->q; p < &cqueue->q[NPROC]; p++) {
-        ++mlfq.runpos; // increment queue position of possible running process
-
-        // check next process in queue if this aint runnable
-        if (p->state != RUNNABLE)
-          continue;
-
-        // set time slice values, set running struct
-        mlfq.timeup = cqueue->quantum;
-
-        while (mlfq.timeup) { // if time remaining is not equal to 0
+      while (mlfq.timeup) {
+          // if time remaining is not equal to 0
           proc = p;
           switchuvm(p);
           p->state = RUNNING;
+          cprintf("about to switch\n");
           // run process until interrupt or complete
           swtch(&cpu->scheduler, proc->context);
           switchkvm();
 
+          cprintf("process %s interrupted by timer interrupt \n", p->name, p->pid, i + 1);
+          // if process comes back as not runnable
+          cprintf("processes current state: %d \n", p->state);
           if (p->state != RUNNABLE){
 
-            // check if process is done running/complete (ZOMBIE)
-            if (p->state == ZOMBIE) {
-              dequeue(cqueue, mlfq.runpos);
-            }
-            // what if process is on i/o thread and not able to make use of cpu even though it is scheduled?
-            // should we just continue to run it anyway? this takes it out and puts it
-            // in next queue
+              // check if process is done running/complete (ZOMBIE)
+              if (p->state == ZOMBIE) {
+                  dequeue(cqueue);
+              }
+              // what if process is on i/o thread and not able to make use of cpu even though it is scheduled?
+              // should we just continue to run it anyway? this takes it out and puts it
+              // in next queue
 
-            // if zombie or on i/o
-            break;
+              // if zombie or on i/o
+              break;
           }
           --mlfq.timeup;
-        }
-        // time is up, swap if still not zombie and not in q6
-        if (p->state != ZOMBIE && i != NQUEUE - 1) {
-          swapqueue(&mlfq.queues[i], &mlfq.queues[i + 1])
-        }
-        break; // if this wasnt there, would continue to loop through this array
       }
+      // process has used its time slice,
+      cprintf("process %s %d has consumed %d ms in Q%d \n", p->name, p->pid, cqueue->quantum, i + 1);
+
+        // time is up, swap if still not zombie and not in q6
+        if (p->state != ZOMBIE) {
+
+          if (i != (NQUEUE - 1)) {
+              swapqueue(&mlfq.queues[i], &mlfq.queues[i + 1], p);
+          } else { // in q6, send to back of the queue
+              swapqueue(&mlfq.queues[i], &mlfq.queues[i], p);
+          }
+        }
+
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         proc = 0;
@@ -536,7 +543,7 @@ mlfqinit(void)
 // updates front and back queue pointers
 // updates queue size
 void
-enqueue(struct queue *q, struct proc *proc)
+enqueue(struct queue *q, struct proc *p)
 {
   // add process to the back of the queue
   // if the back is 63, move back to 0
@@ -551,7 +558,10 @@ enqueue(struct queue *q, struct proc *proc)
 
   if (q->back >= 64)
     q->back = 0;
-  q->q[q->back] = proc;
+
+  q->q[q->back] = p;
+  q->size++;
+  cprintf("%s has been added to the queue\n", p->name);
 }
 
 
@@ -562,26 +572,32 @@ void
 dequeue(struct queue *q)
 {
   // increment front
+  cprintf("dequeue called\n");
   q->front++;
+  q->size--;
   // if front is greater than back, queue is empty
-  if (q->front > q->back) {
-    q->back = -1;
-    q->front = -1;
-  }
+  /* TODO: this is not the case. ex:
+    front is at 63, back is at 7. will overwrite
+    those 7 slots that were added by enqueue*/
+ // if (q->front > q->back) {
+ //   q->back = -1;
+ //   q->front = -1;
+ // }
 
   // check for out of bounds
   if(q->front >= 64)
     q->front = 0;
-  if (q->back >= 64) {
+  // TODO: back will never be changed in this function, so it will never need to be checked
+  if (q->back >= 64)
     q->back = 0;
 }
 
 // dequeues process at position
 // enqueues process in back of next queue
 void
-swapqueue(struct queue *preq, struct queue *postq, struct proc *proc)
+swapqueue(struct queue *preq, struct queue *postq, struct proc *p)
 {
-  enqueue(postq, &proc);
+  enqueue(postq, p);
   dequeue(preq);
 }
 
@@ -596,15 +612,18 @@ boost(){
 }
 
 // returns the next process in the queue
-struct proc *p getproc(struct queue *q) {
-  return &q->q[q->front];
+struct proc*
+peek(struct queue *q) {
+  return q->q[q->front];
 }
 
 // return amount of processess in the queue
-int getsize(struct queue q) {
-  if (q->front == -1 && q->back == -1) {
+int
+getsize(struct queue *q) {
+  if (q->front == -1 && q->back == -1)
     return 0;
-  } else {
-    return q->back - q->front + 1;
-  }
+
+  return q->back - q->front + 1;
+  // TODO: fix -- what if back is 7 and front is 61, for instance?
 }
+

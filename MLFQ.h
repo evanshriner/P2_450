@@ -38,7 +38,6 @@ struct MLFQ {
     struct queue queues[NQUEUE];
 
     // information about the current running process for scheduler
-    int runpos; // processtable position of running process
     int timeup; // remaining time slice
     int boost; // TODO: implement boost functionality
 
