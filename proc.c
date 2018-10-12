@@ -281,6 +281,7 @@ void
 scheduler(void)
 {
   struct proc *p;
+  static int boosttimer = 12;
   //struct queue *cqueue;
   //int i;
 
@@ -292,17 +293,18 @@ scheduler(void)
     // Loop over queues looking for process to run.
     acquire(&ptable.lock);
 
-
     // MLFQ check each queue for processes
     for (int j = 1; j <= NQUEUE; j++) {
 
-      mlfq.timeup = j * 10;
+      mlfq.timeup = j;
       int didRun = 0;
+      int consumed = 0;
 
       // look for the next process that is in this queue, in the ptable
       for (int k = 0; k < NPROC; k++) {
 
         // start from the queue pointer
+        // this starts from the front of queue j, and checks our all the processes after and everythuing before
         p = &ptable.proc[(k + queuepointers[j]) % NPROC];
 
         // is this process in Qj?
@@ -313,9 +315,9 @@ scheduler(void)
 
           didRun = 1;
 
-          // if time remaining is not equal to 0
+          // while time remaining is not equal to 0
           while (mlfq.timeup) {
-          
+            cprintf("mlfq.timeup: %d\n", mlfq.timeup);
             proc = p;
             switchuvm(p);
             p->state = RUNNING;
@@ -327,9 +329,15 @@ scheduler(void)
 
             //cprintf("process %s interrupted by timer interrupt \n", p->name, p->pid, i + 1);
 
+            --boosttimer;
+            ++consumed;
+            if (!boosttimer){
+              cprintf("boosting all processes to q1\n");
+              boost();
+              boosttimer = 12; // reset boost timer to 12 interrupts / 120ms
+            }
             // if process comes back as not runnable
             // cprintf("processes current state: %d \n", p->state);
-
             if (p->state != RUNNABLE){
                 // if zombie or on i/o
                 break;
@@ -338,7 +346,11 @@ scheduler(void)
           }
 
           // process has used its time slice,
-          cprintf("process %s %d has consumed %d ms in Q%d \n", p->name, p->pid, j * 10, j);
+          if (consumed != j) {
+              cprintf("process %s %d went to sleep and only consumed %dms in Q%d \n", p->name, p->pid, consumed * 10, j); // multiply by 10 for 10ms
+          } else {
+              cprintf("process %s %d has consumed the full %dms in Q%d \n", p->name, p->pid, consumed * 10, j); // multiply by 10 for 10ms
+          }
 
           // time is up, set to next q if still not zombie and not in q6
           if (p->state != ZOMBIE) {
@@ -354,7 +366,7 @@ scheduler(void)
 
         }
       }
-      if (didRun == 1) break; // if this wasnt here, would continue to search through next queue in MLFQ for next runnable process.
+      if (didRun) break; // if this wasnt here, would continue to search through next queue in MLFQ for next runnable process.
     }
 
     /*for (cqueue = mlfq.queues; cqueue < &mlfq.queues[NQUEUE]; cqueue++) {
@@ -676,7 +688,12 @@ swapqueue(struct queue *preq, struct queue *postq, struct proc *p)
 // first queue because there is a max of 64 processes in the entire
 void
 boost(){
-
+  struct proc *p;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if (p->queue > 1){
+      p->queue = 1;
+    }
+  }
 }
 
 // returns the next process in the queue
