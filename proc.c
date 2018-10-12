@@ -312,6 +312,9 @@ scheduler(void)
           
           // set the queuepointer for Qj to k
           queuepointers[j] = k+1;
+          if (queuepointers[j] >= NPROC) {
+            queuepointers[j] = 0;
+          }
 
           didRun = 1;
 
