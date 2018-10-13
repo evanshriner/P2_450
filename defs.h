@@ -119,12 +119,7 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
-void            mlfqinit(void);
-void            enqueue(struct queue*, struct proc*);
-void            dequeue(struct queue*);
-void            swapqueue(struct queue*, struct queue*, struct proc*);
 void            boost(void);
-struct proc*    peek(struct queue*);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

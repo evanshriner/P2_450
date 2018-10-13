@@ -12,5 +12,4 @@
 #define NBUF         (MAXOPBLOCKS*3)  // size of disk block cache
 #define FSSIZE       1000  // size of file system in blocks
 #define NQUEUE       6 // number of queues in the multi-level feedback queue
-#define TQ           1 // constant time quantum increase for each queue
 
